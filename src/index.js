@@ -13,6 +13,8 @@ app.use(express.json());
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/workflows', require('./routes/workflowRoutes'));
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
 
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'ok', message: '🚀 Backend is running!' });
