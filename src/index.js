@@ -4,7 +4,6 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 
 dotenv.config();
-connectDB();
 
 const app = express();
 
@@ -13,6 +12,11 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
