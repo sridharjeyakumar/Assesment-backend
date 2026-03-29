@@ -1,5 +1,6 @@
 const Workflow = require('../models/Workflow');
 const WorkflowExecution = require('../models/WorkflowExecution');
+const workflowQueue = require('../jobs/workflowQueue');
 
 exports.getWorkflowsService = async ({ tenantId, page = 1, limit = 10 }) => {
   const skip = (page - 1) * limit;
@@ -62,36 +63,36 @@ exports.triggerWorkflowService = async ({ tenantId, workflowId, userId }) => {
   const workflow = await Workflow.findOne({ _id: workflowId, tenantId });
   if (!workflow) throw new Error('Workflow not found');
 
+  // Create execution record
   const execution = await WorkflowExecution.create({
     tenantId,
     workflowId,
     triggeredBy: userId,
     status: 'pending',
     startedAt: new Date(),
-    logs: [{ step: 'init', status: 'pending', message: 'Workflow execution started' }],
+    logs: [{
+      step: 'init',
+      status: 'pending',
+      message: 'Workflow queued for execution'
+    }],
   });
 
-  setTimeout(async () => {
-    try {
-      execution.status = 'running';
-      execution.logs.push({ step: 'running', status: 'running', message: 'Processing nodes' });
-      await execution.save();
+  // Add to Bull queue
+  const job = await workflowQueue.add({
+    executionId: execution._id.toString(),
+    workflowId: workflowId.toString(),
+    tenantId: tenantId.toString(),
+  }, {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+    removeOnComplete: true,
+    removeOnFail: false,
+  });
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      execution.status = 'success';
-      execution.completedAt = new Date();
-      execution.logs.push({ step: 'complete', status: 'success', message: 'Workflow completed successfully' });
-      await execution.save();
-
-      await Workflow.findByIdAndUpdate(workflowId, { $inc: { executionCount: 1 } });
-    } catch (err) {
-      execution.status = 'failed';
-      execution.completedAt = new Date();
-      execution.logs.push({ step: 'error', status: 'failed', message: err.message });
-      await execution.save();
-    }
-  }, 100);
+  console.log(`📋 Workflow job added to queue: ${job.id}`);
 
   return execution;
 };
